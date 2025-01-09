@@ -55,7 +55,7 @@ runs:
         if [ ! -f ".sonar/scanner/sonar-scanner-${SCANNER_VERSION}-linux/bin/sonar-scanner" ]; then
           # curl -sSLo ".sonar/scanner/sonar-scanner.zip" \
           #   "https://binaries.sonarsource.com/Distribution/sonar-scanner-cli/sonar-scanner-cli-${SCANNER_VERSION}-linux.zip"
-          wget -q "https://binaries.sonarsource.com/Distribution/sonar-scanner-cli/sonar-scanner-cli-${SCANNER_VERSION}-linux.zip.sha256" -O ".sonar/scanner/sonar-scanner.zip"
+          wget -q "https://binaries.sonarsource.com/Distribution/sonar-scanner-cli/sonar-scanner-cli-${SCANNER_VERSION}-linux.zip" -O ".sonar/scanner/sonar-scanner.zip"
           ls -laF .sonar/scanner
           unzip -o ".sonar/scanner/sonar-scanner.zip" -d .sonar/scanner/
           mv .sonar/scanner/sonar-scanner-${SCANNER_VERSION}-linux/* .sonar/scanner/
