@@ -62,6 +62,11 @@ runs:
         fi
         echo ".sonar/scanner/bin" >> $GITHUB_PATH
 
+    - name: Verify version
+      shell: bash
+      run: |
+        .sonar/scanner/bin/sonar-scanner --version
+
     - name: Run Analysis
       shell: bash
       run: |
@@ -71,7 +76,10 @@ runs:
           -Dsonar.exclusions=${{ inputs.exclusions }} \
           -Dsonar.scm.provider=git \
           -Dsonar.sourceEncoding=UTF-8 \
-          -Dsonar.working.directory=${{ github.workspace }}/.scannerwork
+          -Dsonar.working.directory=${{ github.workspace }}/.scannerwork \
+          -Dsonar.scanner.skip.jre.verification=true \
+          -Dsonar.host.url=http://localhost \
+          -Dsonar.login=admin
 
     - name: Package Results
       shell: bash
