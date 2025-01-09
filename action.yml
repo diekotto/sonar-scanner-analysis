@@ -224,6 +224,7 @@ runs:
 
         # Create ZIP archive
         zip -r "sonar-results_${TIMESTAMP}.zip" "${RESULTS_DIR}"
+
     - name: Upload Results
       uses: actions/upload-artifact@v4
       with:
