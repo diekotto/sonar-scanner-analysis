@@ -1,36 +1,44 @@
-name: 'SonarScanner Analysis'
-description: 'Run SonarScanner analysis and upload results as artifacts'
-author: 'Your Name'
+name: "SonarScanner Analysis"
+description: "Run SonarScanner analysis and upload results as artifacts"
+author: "Your Name"
 branding:
-  icon: 'check-square'
-  color: 'blue'
+  icon: "check-square"
+  color: "blue"
 
 inputs:
   project-key:
-    description: 'Project key for the analysis'
+    description: "Project key for the analysis"
     required: true
   sources:
-    description: 'Source directories to analyze'
+    description: "Source directories to analyze"
     required: true
-    default: '.'
+    default: "."
   exclusions:
-    description: 'Patterns to exclude from analysis'
+    description: "Patterns to exclude from analysis"
     required: false
-    default: '**/node_modules/**,**/dist/**'
+    default: "**/node_modules/**,**/dist/**"
   java-version:
-    description: 'Java version for SonarScanner'
+    description: "Java version for SonarScanner"
     required: false
-    default: '17'
+    default: "17"
+  scanner-version:
+    description: "SonarScanner version to use"
+    required: false
+    default: "6.2.1.4610"
+  retention-days:
+    description: "Number of days to retain the uploaded artifact"
+    required: false
+    default: "7"
 
 runs:
-  using: 'composite'
+  using: "composite"
   steps:
     - name: Set up Java
       uses: actions/setup-java@v4
       with:
-        distribution: 'temurin'
+        distribution: "temurin"
         java-version: ${{ inputs.java-version }}
-        
+
     - name: Cache SonarScanner
       uses: actions/cache@v4
       with:
@@ -41,7 +49,7 @@ runs:
     - name: Install SonarScanner
       shell: bash
       run: |
-        SCANNER_VERSION="4.8.0.2856"
+        SCANNER_VERSION="${{ inputs.scanner-version }}"
         mkdir -p .sonar/scanner
         if [ ! -f ".sonar/scanner/sonar-scanner-${SCANNER_VERSION}-linux/bin/sonar-scanner" ]; then
           curl -sSLo ".sonar/scanner/sonar-scanner.zip" \
@@ -69,10 +77,10 @@ runs:
         TIMESTAMP=$(date +%Y%m%d_%H%M%S)
         RESULTS_DIR="sonar-results_${TIMESTAMP}"
         mkdir -p "${RESULTS_DIR}"
-        
+
         # Copy relevant files
         cp -r .scannerwork/* "${RESULTS_DIR}/"
-        
+
         # Create summary file
         {
           echo "SonarScanner Analysis Results"
@@ -85,13 +93,13 @@ runs:
             cat ".scannerwork/report-task.txt"
           fi
         } > "${RESULTS_DIR}/summary.txt"
-        
+
         # Create ZIP archive
         zip -r "sonar-results_${TIMESTAMP}.zip" "${RESULTS_DIR}"
 
     - name: Upload Results
-      uses: actions/upload-artifact@v3
+      uses: actions/upload-artifact@v4
       with:
         name: sonar-analysis-results
         path: sonar-results_*.zip
-        retention-days: 90
+        retention-days: ${{ inputs.retention-days }}

@@ -10,17 +10,17 @@ jobs:
   analyze:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@v4
           
       - name: Run SonarScanner Analysis
-        uses: your-username/sonar-scanner-action@v1
+        uses: diekotto/sonar-scanner-analysis@v1
         with:
           project-key: example-project
           sources: src/
           exclusions: '**/*.test.js,**/node_modules/**'
           
       - name: Download Analysis Results
-        uses: actions/download-artifact@v3
+        uses: actions/download-artifact@v4
         with:
           name: sonar-analysis-results
           path: ./analysis
