@@ -2,6 +2,11 @@
 
 This action runs SonarScanner CLI analysis on your codebase and uploads the results as artifacts.
 
+## Sonar qube docs
+
+- [Server](https://docs.sonarsource.com/sonarqube-server/latest/setup-and-upgrade/pre-installation/linux/)
+- [CLI](https://docs.sonarsource.com/sonarqube-server/latest/analyzing-source-code/scanners/sonarscanner/)
+
 ## Features
 
 - 🔍 Runs SonarScanner analysis without requiring a SonarQube server
@@ -63,4 +68,4 @@ jobs:
 
 ## License
 
-The scripts and documentation in this project are released under the MIT (License)[LICENSE].
+The scripts and documentation in this project are released under the MIT [License](LICENSE).
