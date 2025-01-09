@@ -1,6 +1,6 @@
 name: "SonarScanner Analysis"
-description: "Run SonarScanner analysis and upload results as artifacts"
-author: "Your Name"
+description: "Run SonarScanner analysis with local Docker containers"
+author: "Diego Maroto"
 branding:
   icon: "check-square"
   color: "blue"
@@ -11,20 +11,16 @@ inputs:
     required: true
   sources:
     description: "Source directories to analyze"
-    required: true
+    required: false
     default: "."
   exclusions:
     description: "Patterns to exclude from analysis"
     required: false
     default: "**/node_modules/**,**/dist/**"
-  java-version:
-    description: "Java version for SonarScanner"
+  wait-for-server:
+    description: "Time in seconds to wait for SonarQube server to start"
     required: false
-    default: "17"
-  scanner-version:
-    description: "SonarScanner version to use"
-    required: false
-    default: "6.2.1.4610"
+    default: "60"
   retention-days:
     description: "Number of days to retain the uploaded artifact"
     required: false
@@ -33,53 +29,55 @@ inputs:
 runs:
   using: "composite"
   steps:
-    - name: Set up Java
-      uses: actions/setup-java@v4
-      with:
-        distribution: "temurin"
-        java-version: ${{ inputs.java-version }}
+    - name: Set up Docker
+      shell: bash
+      run: docker --version
 
-    - name: Cache SonarScanner
-      uses: actions/cache@v4
-      with:
-        path: .sonar/scanner
-        key: diekotto-sonar-scanner-analysis
-        restore-keys: diekotto-sonar-scanner-analysis
-
-    - name: Install SonarScanner
+    - name: Start SonarQube Server
       shell: bash
       run: |
-        set -e
-        SCANNER_VERSION="${{ inputs.scanner-version }}"
-        mkdir -p .sonar/scanner
-        if [ ! -f ".sonar/scanner/sonar-scanner-${SCANNER_VERSION}-linux/bin/sonar-scanner" ]; then
-          curl -sSLo ".sonar/scanner/sonar-scanner.zip" \
-            "https://binaries.sonarsource.com/Distribution/sonar-scanner-cli/sonar-scanner-cli-${SCANNER_VERSION}-linux-x64.zip"
-          ls -laF .sonar/scanner
-          unzip -o ".sonar/scanner/sonar-scanner.zip" -d .sonar/scanner/
-          mv .sonar/scanner/sonar-scanner-${SCANNER_VERSION}-linux-x64/* .sonar/scanner/
-          rm .sonar/scanner/sonar-scanner.zip
-        fi
-        echo ".sonar/scanner/bin" >> $GITHUB_PATH
+        echo "Starting SonarQube server container..."
+        docker run -d --name sonar-server \
+          -p 9000:9000 \
+          sonarqube:lts-community
 
-    - name: Verify version
+        # Wait for server to be ready
+        echo "Waiting for SonarQube to start..."
+        timeout=${{ inputs.wait-for-server }}
+        until curl -s http://localhost:9000/api/system/status | grep -q '"status":"UP"'; do
+          if [ "$timeout" -le 0 ]; then
+            echo "Timeout waiting for SonarQube server"
+            exit 1
+          fi
+          echo "Waiting... ($timeout seconds remaining)"
+          sleep 5
+          timeout=$((timeout - 5))
+        done
+
+        # Get default token (for community edition)
+        echo "Generating authentication token..."
+        TOKEN=$(docker exec sonar-server curl -s -u admin:admin \
+          -X POST "http://localhost:9000/api/user_tokens/generate" \
+          -H "Content-Type: application/x-www-form-urlencoded" \
+          -d "name=github-action" | grep -o '"token":"[^"]*' | cut -d'"' -f4)
+
+        echo "SONAR_TOKEN=${TOKEN}" >> $GITHUB_ENV
+
+    - name: Run SonarScanner
       shell: bash
       run: |
-        .sonar/scanner/bin/sonar-scanner --version
-
-    - name: Run Analysis
-      shell: bash
-      run: |
-        sonar-scanner \
-          -Dsonar.projectKey=${{ inputs.project-key }} \
-          -Dsonar.sources=${{ inputs.sources }} \
-          -Dsonar.exclusions=${{ inputs.exclusions }} \
-          -Dsonar.scm.provider=git \
-          -Dsonar.sourceEncoding=UTF-8 \
-          -Dsonar.working.directory=${{ github.workspace }}/.scannerwork \
-          -Dsonar.scanner.skip.jre.verification=true \
-          -Dsonar.host.url=http://localhost \
-          -Dsonar.login=admin
+        echo "Running SonarScanner analysis..."
+        docker run --rm \
+          --network="host" \
+          -v "${{ github.workspace }}:/usr/src" \
+          -e SONAR_HOST_URL="http://localhost:9000" \
+          -e SONAR_LOGIN="${SONAR_TOKEN}" \
+          -e SONAR_SCANNER_OPTS="-Dsonar.projectKey=${{ inputs.project-key }} \
+            -Dsonar.sources=${{ inputs.sources }} \
+            -Dsonar.exclusions=${{ inputs.exclusions }} \
+            -Dsonar.scm.provider=git \
+            -Dsonar.sourceEncoding=UTF-8" \
+          sonarsource/sonar-scanner-cli
 
     - name: Package Results
       shell: bash
@@ -88,28 +86,42 @@ runs:
         RESULTS_DIR="sonar-results_${TIMESTAMP}"
         mkdir -p "${RESULTS_DIR}"
 
-        # Copy relevant files
-        cp -r .scannerwork/* "${RESULTS_DIR}/"
+        # Get analysis results from API
+        curl -s -u "${SONAR_TOKEN}:" \
+          "http://localhost:9000/api/issues/search?projectKeys=${{ inputs.project-key }}" \
+          > "${RESULTS_DIR}/issues.json"
 
-        # Create summary file
+        curl -s -u "${SONAR_TOKEN}:" \
+          "http://localhost:9000/api/measures/component?component=${{ inputs.project-key }}&metricKeys=bugs,vulnerabilities,code_smells,coverage,duplicated_lines_density" \
+          > "${RESULTS_DIR}/metrics.json"
+
+        # Create summary
         {
           echo "SonarScanner Analysis Results"
           echo "=========================="
           echo "Project Key: ${{ inputs.project-key }}"
           echo "Date: $(date)"
           echo "Runner: ${{ runner.os }}"
-          if [ -f ".scannerwork/report-task.txt" ]; then
-            echo -e "\nReport Details:"
-            cat ".scannerwork/report-task.txt"
-          fi
+          echo -e "\nMetrics:"
+          jq -r '.component.measures[] | "\(.metric): \(.value)"' "${RESULTS_DIR}/metrics.json"
+          echo -e "\nIssues Summary:"
+          jq -r '.total' "${RESULTS_DIR}/issues.json"
         } > "${RESULTS_DIR}/summary.txt"
 
         # Create ZIP archive
         zip -r "sonar-results_${TIMESTAMP}.zip" "${RESULTS_DIR}"
 
     - name: Upload Results
-      uses: actions/upload-artifact@v4
+      uses: actions/upload-artifact@v3
       with:
         name: sonar-analysis-results
         path: sonar-results_*.zip
         retention-days: ${{ inputs.retention-days }}
+
+    - name: Cleanup
+      shell: bash
+      if: always()
+      run: |
+        echo "Stopping SonarQube server..."
+        docker stop sonar-server || true
+        docker rm sonar-server || true
