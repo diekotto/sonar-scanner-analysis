@@ -56,10 +56,11 @@ runs:
 
         # Get default token (for community edition)
         echo "Generating authentication token..."
-        TOKEN=$(docker exec sonar-server curl -s -u admin:admin \
-          -X POST "http://localhost:9000/api/user_tokens/generate" \
-          -H "Content-Type: application/x-www-form-urlencoded" \
-          -d "name=github-action" | grep -o '"token":"[^"]*' | cut -d'"' -f4)
+        TOKEN=$(docker exec sonar-test wget -qO- --auth-no-challenge \
+          --http-user=admin --http-password=admin \
+          --header="Content-Type: application/x-www-form-urlencoded" \
+          --post-data="name=test-token" \
+          http://localhost:9000/api/user_tokens/generate | grep -o '"token":"[^"]*' | cut -d'"' -f4)
 
         echo "SONAR_TOKEN=${TOKEN}" >> $GITHUB_ENV
 
