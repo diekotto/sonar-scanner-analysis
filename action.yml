@@ -56,7 +56,7 @@ runs:
 
         # Get default token (for community edition)
         echo "Generating authentication token..."
-        TOKEN=$(docker exec sonar-test wget -qO- --auth-no-challenge \
+        TOKEN=$(docker exec sonar-server wget -qO- --auth-no-challenge \
           --http-user=admin --http-password=admin \
           --header="Content-Type: application/x-www-form-urlencoded" \
           --post-data="name=test-token" \
