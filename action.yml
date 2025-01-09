@@ -68,7 +68,7 @@ runs:
       shell: bash
       run: |
         echo "Running SonarScanner analysis..."
-        echo "Token: ${ SONAR_TOKEN }"
+        echo "Token: ${SONAR_TOKEN}"
         docker ps
         docker run --rm \
           --network="host" \
