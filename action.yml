@@ -1,0 +1,97 @@
+name: 'SonarScanner Analysis'
+description: 'Run SonarScanner analysis and upload results as artifacts'
+author: 'Your Name'
+branding:
+  icon: 'check-square'
+  color: 'blue'
+
+inputs:
+  project-key:
+    description: 'Project key for the analysis'
+    required: true
+  sources:
+    description: 'Source directories to analyze'
+    required: true
+    default: '.'
+  exclusions:
+    description: 'Patterns to exclude from analysis'
+    required: false
+    default: '**/node_modules/**,**/dist/**'
+  java-version:
+    description: 'Java version for SonarScanner'
+    required: false
+    default: '17'
+
+runs:
+  using: 'composite'
+  steps:
+    - name: Set up Java
+      uses: actions/setup-java@v4
+      with:
+        distribution: 'temurin'
+        java-version: ${{ inputs.java-version }}
+        
+    - name: Cache SonarScanner
+      uses: actions/cache@v4
+      with:
+        path: .sonar/scanner
+        key: ${{ runner.os }}-sonar-scanner
+        restore-keys: ${{ runner.os }}-sonar-scanner
+
+    - name: Install SonarScanner
+      shell: bash
+      run: |
+        SCANNER_VERSION="4.8.0.2856"
+        mkdir -p .sonar/scanner
+        if [ ! -f ".sonar/scanner/sonar-scanner-${SCANNER_VERSION}-linux/bin/sonar-scanner" ]; then
+          curl -sSLo ".sonar/scanner/sonar-scanner.zip" \
+            "https://binaries.sonarsource.com/Distribution/sonar-scanner-cli/sonar-scanner-cli-${SCANNER_VERSION}-linux.zip"
+          unzip -o ".sonar/scanner/sonar-scanner.zip" -d .sonar/scanner/
+          mv .sonar/scanner/sonar-scanner-${SCANNER_VERSION}-linux/* .sonar/scanner/
+          rm .sonar/scanner/sonar-scanner.zip
+        fi
+        echo ".sonar/scanner/bin" >> $GITHUB_PATH
+
+    - name: Run Analysis
+      shell: bash
+      run: |
+        sonar-scanner \
+          -Dsonar.projectKey=${{ inputs.project-key }} \
+          -Dsonar.sources=${{ inputs.sources }} \
+          -Dsonar.exclusions=${{ inputs.exclusions }} \
+          -Dsonar.scm.provider=git \
+          -Dsonar.sourceEncoding=UTF-8 \
+          -Dsonar.working.directory=${{ github.workspace }}/.scannerwork
+
+    - name: Package Results
+      shell: bash
+      run: |
+        TIMESTAMP=$(date +%Y%m%d_%H%M%S)
+        RESULTS_DIR="sonar-results_${TIMESTAMP}"
+        mkdir -p "${RESULTS_DIR}"
+        
+        # Copy relevant files
+        cp -r .scannerwork/* "${RESULTS_DIR}/"
+        
+        # Create summary file
+        {
+          echo "SonarScanner Analysis Results"
+          echo "=========================="
+          echo "Project Key: ${{ inputs.project-key }}"
+          echo "Date: $(date)"
+          echo "Runner: ${{ runner.os }}"
+          if [ -f ".scannerwork/report-task.txt" ]; then
+            echo -e "\nReport Details:"
+            cat ".scannerwork/report-task.txt"
+          fi
+        } > "${RESULTS_DIR}/summary.txt"
+        
+        # Create ZIP archive
+        zip -r "sonar-results_${TIMESTAMP}.zip" "${RESULTS_DIR}"
+
+    - name: Upload Results
+      uses: actions/upload-artifact@v3
+      with:
+        name: sonar-analysis-results
+        path: sonar-results_*.zip
+        retention-days: 90
