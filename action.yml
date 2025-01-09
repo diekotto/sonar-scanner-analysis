@@ -70,19 +70,19 @@ runs:
         echo "Running SonarScanner analysis..."
         echo "Debug: Current directory contents:"
         ls -la
-        
+
         echo "Debug: Workspace contents:"
         ls -la ${{ github.workspace }}
-        
+
         echo "Debug: Sources path contents:"
         ls -la ${{ inputs.sources }}
-        
+
         echo "Debug: Environment variables:"
         printenv | grep SONAR
-        
+
         echo "Debug: Token validation:"
         curl -s -u "${SONAR_TOKEN}:" http://localhost:9000/api/authentication/validate
-        
+
         echo "Running scanner with verbose output..."
         docker run --rm \
           --network="host" \
@@ -99,8 +99,8 @@ runs:
             -Dsonar.verbose=true \
             -Dsonar.log.level=DEBUG \
             -X" \
-          sonarsource/sonar-scanner-cli
-        
+          sonarsource/sonar-scanner-cli 2>&1 | tee sonar_analysis.log
+
         echo "Debug: Checking if project was created:"
         curl -s -u "${SONAR_TOKEN}:" "http://localhost:9000/api/projects/search?projects=${{ inputs.project-key }}" | jq .
 
@@ -111,6 +111,34 @@ runs:
         RESULTS_DIR="sonar-results_${TIMESTAMP}"
         mkdir -p "${RESULTS_DIR}"
 
+        # Wait for analysis to complete
+        echo "Waiting for analysis to complete..."
+        sleep 30  # Give SonarQube time to process
+
+        # Check if analysis is complete
+        ANALYSIS_ID=$(curl -s -u "${SONAR_TOKEN}:" \
+          "http://localhost:9000/api/ce/activity?component=${{ inputs.project-key }}" | \
+          jq -r '.tasks[0].id')
+
+        if [ ! -z "$ANALYSIS_ID" ]; then
+          echo "Waiting for analysis task $ANALYSIS_ID to complete..."
+          while true; do
+            STATUS=$(curl -s -u "${SONAR_TOKEN}:" \
+              "http://localhost:9000/api/ce/task?id=${ANALYSIS_ID}" | \
+              jq -r '.task.status')
+            
+            if [ "$STATUS" = "SUCCESS" ]; then
+              echo "Analysis complete!"
+              break
+            elif [ "$STATUS" = "FAILED" ]; then
+              echo "Analysis failed!"
+              exit 1
+            fi
+            echo "Analysis still processing... Status: $STATUS"
+            sleep 10
+          done
+        fi
+
         {
           echo "# 🔍 SonarQube Analysis Results"
           echo "## Project Information"
@@ -120,9 +148,10 @@ runs:
           
           echo "## 🎯 Quality Gate Status"
           QUALITY_GATE=$(curl -s -u "${SONAR_TOKEN}:" \
-            "http://localhost:9000/api/qualitygates/project_status?projectKey=${{ inputs.project-key }}" | \
-            jq -r '.projectStatus.status')
-          echo "**Status**: ${QUALITY_GATE:-'N/A'}"
+            "http://localhost:9000/api/qualitygates/project_status?projectKey=${{ inputs.project-key }}")
+          
+          STATUS=$(echo "$QUALITY_GATE" | jq -r '.projectStatus.status // "N/A"')
+          echo "**Status**: ${STATUS}"
           
           echo "## 📊 Metrics"
           METRICS=$(curl -s -u "${SONAR_TOKEN}:" \
@@ -130,127 +159,71 @@ runs:
           
           echo "| Metric | Value | Rating |"
           echo "|--------|--------|--------|"
-          {
-            echo "Bugs|$(jq -r '.component.measures[] | select(.metric == "bugs") | .value' <<< "$METRICS")|$(jq -r '.component.measures[] | select(.metric == "reliability_rating") | .value' <<< "$METRICS")"
-            echo "Vulnerabilities|$(jq -r '.component.measures[] | select(.metric == "vulnerabilities") | .value' <<< "$METRICS")|$(jq -r '.component.measures[] | select(.metric == "security_rating") | .value' <<< "$METRICS")"
-            echo "Code Smells|$(jq -r '.component.measures[] | select(.metric == "code_smells") | .value' <<< "$METRICS")|$(jq -r '.component.measures[] | select(.metric == "sqale_rating") | .value' <<< "$METRICS")"
-            echo "Coverage|$(jq -r '.component.measures[] | select(.metric == "coverage") | .value' <<< "$METRICS")|N/A"
-            echo "Duplicated Lines|$(jq -r '.component.measures[] | select(.metric == "duplicated_lines_density") | .value' <<< "$METRICS")|N/A"
-          } | while IFS=\| read -r metric value rating; do
-            # Convert ratings from numbers to letters (1=A, 2=B, etc)
-            rating_letter=""
-            case $rating in
-              "1") rating_letter="A" ;;
-              "2") rating_letter="B" ;;
-              "3") rating_letter="C" ;;
-              "4") rating_letter="D" ;;
-              "5") rating_letter="E" ;;
-              *) rating_letter="$rating" ;;
+          
+          # Function to safely get metric value
+          get_metric_value() {
+            local metric=$1
+            echo "$METRICS" | jq -r --arg metric "$metric" \
+              '.component.measures[] | select(.metric == $metric) | .value // "N/A"'
+          }
+
+          # Function to convert rating to letter
+          convert_rating() {
+            case $1 in
+              "1") echo "A" ;;
+              "2") echo "B" ;;
+              "3") echo "C" ;;
+              "4") echo "D" ;;
+              "5") echo "E" ;;
+              *) echo "N/A" ;;
             esac
-            echo "| $metric | ${value:-0} | ${rating_letter:-N/A} |"
+          }
+
+          # Print metrics with safe value extraction
+          metrics=(
+            "bugs|reliability_rating"
+            "vulnerabilities|security_rating"
+            "code_smells|sqale_rating"
+            "coverage|"
+            "duplicated_lines_density|"
+          )
+
+          for metric_pair in "${metrics[@]}"; do
+            IFS="|" read -r metric rating_metric <<< "$metric_pair"
+            value=$(get_metric_value "$metric")
+            if [ -n "$rating_metric" ]; then
+              rating=$(get_metric_value "$rating_metric")
+              rating_letter=$(convert_rating "$rating")
+            else
+              rating_letter="N/A"
+            fi
+            echo "| ${metric^} | ${value:-0} | $rating_letter |"
           done
 
-          echo "## 🔍 Analysis Configuration"
-          echo "### Source Directories"
-          echo "\`\`\`"
-          ls -la ${{ inputs.sources }}
-          echo "\`\`\`"
-          
-          echo "### Environment"
-          echo "\`\`\`"
-          printenv | grep SONAR || echo "No SONAR environment variables found"
-          echo "\`\`\`"
-          
-          echo "### Scanner Configuration"
-          echo "- Sources: \`${{ inputs.sources }}\`"
-          echo "- Exclusions: \`${{ inputs.exclusions }}\`"
-          echo "- Project Key: \`${{ inputs.project-key }}\`"
-          
-          echo "## 🐛 Issues Breakdown"
+          echo "## 🔍 Issues Breakdown"
           ISSUES=$(curl -s -u "${SONAR_TOKEN}:" \
-            "http://localhost:9000/api/issues/search?projectKeys=${{ inputs.project-key }}&facets=types,severities")
+            "http://localhost:9000/api/issues/search?componentKeys=${{ inputs.project-key }}&resolved=false")
           
           echo "### By Type"
           echo "| Type | Count |"
           echo "|------|-------|"
-          jq -r '.facets[] | select(.property == "types") | .values[] | "| \(.val) | \(.count) |"' <<< "$ISSUES"
+          echo "$ISSUES" | jq -r '
+            [.issues[] | .type] | group_by(.) | map({type: .[0], count: length}) |
+            .[] | "| \(.type) | \(.count) |"
+          ' || echo "| No issues found | 0 |"
           
           echo "### By Severity"
           echo "| Severity | Count |"
           echo "|----------|--------|"
-          jq -r '.facets[] | select(.property == "severities") | .values[] | "| \(.val) | \(.count) |"' <<< "$ISSUES"
+          echo "$ISSUES" | jq -r '
+            [.issues[] | .severity] | group_by(.) | map({severity: .[0], count: length}) |
+            .[] | "| \(.severity) | \(.count) |"
+          ' || echo "| No issues found | 0 |"
           
-        } >> $GITHUB_STEP_SUMMARY
-
-        echo "Debug: Checking SonarQube server status..."
-        curl -v -s http://localhost:9000/api/system/status
-
-        echo "Debug: Checking token validity..."
-        curl -v -s -u "${SONAR_TOKEN}:" http://localhost:9000/api/authentication/validate
-
-        # Get analysis results from API with verbose output
-        echo "Debug: Fetching issues..."
-        ISSUES_RESPONSE=$(curl -v -s -u "${SONAR_TOKEN}:" \
-          "http://localhost:9000/api/issues/search?projectKeys=${{ inputs.project-key }}")
-        echo "$ISSUES_RESPONSE" > "${RESULTS_DIR}/issues.json"
-        
-        echo "Debug: Fetching metrics..."
-        METRICS_RESPONSE=$(curl -v -s -u "${SONAR_TOKEN}:" \
-          "http://localhost:9000/api/measures/component?component=${{ inputs.project-key }}&metricKeys=bugs,vulnerabilities,code_smells,coverage,duplicated_lines_density")
-        echo "$METRICS_RESPONSE" > "${RESULTS_DIR}/metrics.json"
-
-        # Get project information
-        echo "Debug: Fetching project info..."
-        curl -v -s -u "${SONAR_TOKEN}:" \
-          "http://localhost:9000/api/projects/search?projects=${{ inputs.project-key }}" \
-          > "${RESULTS_DIR}/project_info.json"
-
-        # Create detailed summary
-        {
-          echo "SonarScanner Analysis Results"
-          echo "=========================="
-          echo "Project Key: ${{ inputs.project-key }}"
-          echo "Date: $(date)"
-          echo "Runner: ${{ runner.os }}"
-          
-          echo -e "\nServer Status:"
-          curl -s http://localhost:9000/api/system/status | jq '.'
-          
-          echo -e "\nProject Information:"
-          jq '.' "${RESULTS_DIR}/project_info.json"
-          
-          echo -e "\nMetrics:"
-          if [ -s "${RESULTS_DIR}/metrics.json" ]; then
-            jq -r '.component.measures[] | "\(.metric): \(.value)"' "${RESULTS_DIR}/metrics.json" || echo "Error parsing metrics JSON"
-            echo "Raw metrics response:"
-            cat "${RESULTS_DIR}/metrics.json"
-          else
-            echo "No metrics data found"
-          fi
-          
-          echo -e "\nIssues Summary:"
-          if [ -s "${RESULTS_DIR}/issues.json" ]; then
-            echo "Total issues: $(jq -r '.total' "${RESULTS_DIR}/issues.json")"
-            echo "Issues by type:"
-            jq -r '.issues[] | .type' "${RESULTS_DIR}/issues.json" | sort | uniq -c || echo "No issues found"
-            echo "Issues by severity:"
-            jq -r '.issues[] | .severity' "${RESULTS_DIR}/issues.json" | sort | uniq -c || echo "No issues found"
-            echo "Raw issues response:"
-            cat "${RESULTS_DIR}/issues.json"
-          else
-            echo "No issues data found"
-          fi
-          
-          echo -e "\nEnvironment Information:"
-          echo "Docker containers running:"
-          docker ps
-          echo -e "\nDocker logs from sonar-server:"
-          docker logs sonar-server
-        } > "${RESULTS_DIR}/summary.txt"
+        } >> "${RESULTS_DIR}/analysis_report.md"
 
         # Create ZIP archive
         zip -r "sonar-results_${TIMESTAMP}.zip" "${RESULTS_DIR}"
-
     - name: Upload Results
       uses: actions/upload-artifact@v4
       with:
