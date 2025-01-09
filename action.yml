@@ -54,6 +54,7 @@ runs:
         if [ ! -f ".sonar/scanner/sonar-scanner-${SCANNER_VERSION}-linux/bin/sonar-scanner" ]; then
           curl -sSLo ".sonar/scanner/sonar-scanner.zip" \
             "https://binaries.sonarsource.com/Distribution/sonar-scanner-cli/sonar-scanner-cli-${SCANNER_VERSION}-linux.zip"
+          ls -laFR
           unzip -o ".sonar/scanner/sonar-scanner.zip" -d .sonar/scanner/
           mv .sonar/scanner/sonar-scanner-${SCANNER_VERSION}-linux/* .sonar/scanner/
           rm .sonar/scanner/sonar-scanner.zip
