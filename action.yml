@@ -99,7 +99,7 @@ runs:
             -Dsonar.verbose=true \
             -Dsonar.log.level=DEBUG \
             -X" \
-          sonarsource/sonar-scanner-cli 2>&1 | tee sonar_analysis.log
+          sonarsource/sonar-scanner-cli
         
         echo "Debug: Checking if project was created:"
         curl -s -u "${SONAR_TOKEN}:" "http://localhost:9000/api/projects/search?projects=${{ inputs.project-key }}" | jq .
@@ -119,28 +119,6 @@ runs:
           echo "- **Runner**: ${{ runner.os }}"
           
           echo "## 🎯 Quality Gate Status"
-          
-          # Extract task ID from the analysis output
-          TASK_ID=$(tail -n 10 sonar_analysis.log | grep "task?id=" | sed -n 's/.*task?id=\([^]]*\).*/\1/p')
-          echo "Waiting for analysis to be processed (Task ID: $TASK_ID)..."
-          
-          # Wait for the analysis to be processed
-          while true; do
-            TASK_STATUS=$(curl -s -u "${SONAR_TOKEN}:" \
-              "http://localhost:9000/api/ce/task?id=${TASK_ID}" | \
-              jq -r '.task.status')
-            
-            if [ "$TASK_STATUS" = "SUCCESS" ]; then
-              break
-            elif [ "$TASK_STATUS" = "FAILED" ] || [ "$TASK_STATUS" = "CANCELED" ]; then
-              echo "Error: Analysis processing failed with status: $TASK_STATUS"
-              exit 1
-            fi
-            
-            echo "Analysis is still being processed... Status: $TASK_STATUS"
-            sleep 5
-          done
-          
           QUALITY_GATE=$(curl -s -u "${SONAR_TOKEN}:" \
             "http://localhost:9000/api/qualitygates/project_status?projectKey=${{ inputs.project-key }}" | \
             jq -r '.projectStatus.status')
@@ -274,7 +252,7 @@ runs:
         zip -r "sonar-results_${TIMESTAMP}.zip" "${RESULTS_DIR}"
 
     - name: Upload Results
-      uses: actions/upload-artifact@v3
+      uses: actions/upload-artifact@v4
       with:
         name: sonar-analysis-results
         path: sonar-results_*.zip
