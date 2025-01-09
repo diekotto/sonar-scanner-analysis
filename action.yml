@@ -64,15 +64,16 @@ runs:
 
         echo "SONAR_TOKEN=${TOKEN}" >> $GITHUB_ENV
 
+        # Create project explicitly
+        echo "Creating project..."
+        curl -X POST -s -u "${TOKEN}:" \
+          "http://localhost:9000/api/projects/create" \
+          -d "name=${{ inputs.project-key }}&project=${{ inputs.project-key }}"
+
     - name: Run SonarScanner
       shell: bash
       run: |
         echo "Running SonarScanner analysis..."
-        echo "Debug: Current directory contents:"
-        ls -la
-
-        echo "Debug: Workspace contents:"
-        ls -la ${{ github.workspace }}
 
         echo "Debug: Sources path contents:"
         ls -la ${{ inputs.sources }}
@@ -82,6 +83,7 @@ runs:
 
         echo "Debug: Token validation:"
         curl -s -u "${SONAR_TOKEN}:" http://localhost:9000/api/authentication/validate
+        echo "\n"
 
         echo "Running scanner with verbose output..."
         docker run --rm \
@@ -101,8 +103,13 @@ runs:
             -X" \
           sonarsource/sonar-scanner-cli 2>&1 | tee sonar_analysis.log
 
+        # Wait for analysis to complete
+        echo "Waiting for analysis to complete..."
+        sleep 60  # Give SonarQube time to process
+
         echo "Debug: Checking if project was created:"
         curl -s -u "${SONAR_TOKEN}:" "http://localhost:9000/api/projects/search?projects=${{ inputs.project-key }}" | jq .
+        echo "\n"
 
     - name: Package Results
       shell: bash
@@ -111,32 +118,60 @@ runs:
         RESULTS_DIR="sonar-results_${TIMESTAMP}"
         mkdir -p "${RESULTS_DIR}"
 
-        # Wait for analysis to complete
-        echo "Waiting for analysis to complete..."
-        sleep 30  # Give SonarQube time to process
-
         # Check if analysis is complete
-        ANALYSIS_ID=$(curl -s -u "${SONAR_TOKEN}:" \
-          "http://localhost:9000/api/ce/activity?component=${{ inputs.project-key }}" | \
-          jq -r '.tasks[0].id')
+        echo "Fetching latest analysis task..."
+        TASKS_RESPONSE=$(curl -s -u "${SONAR_TOKEN}:" \
+          "http://localhost:9000/api/ce/activity?component=${{ inputs.project-key }}&status=IN_PROGRESS,PENDING")
+
+        echo "Debug - Tasks Response:"
+        echo "$TASKS_RESPONSE" | jq '.'
+
+        ANALYSIS_ID=$(echo "$TASKS_RESPONSE" | jq -r '.tasks[0].id // empty')
+
+        if [ -z "$ANALYSIS_ID" ]; then
+          echo "No active analysis task found, checking recent completed tasks..."
+          TASKS_RESPONSE=$(curl -s -u "${SONAR_TOKEN}:" \
+            "http://localhost:9000/api/ce/activity?component=${{ inputs.project-key }}&status=SUCCESS&ps=1")
+          ANALYSIS_ID=$(echo "$TASKS_RESPONSE" | jq -r '.tasks[0].id // empty')
+        fi
 
         if [ ! -z "$ANALYSIS_ID" ]; then
-          echo "Waiting for analysis task $ANALYSIS_ID to complete..."
-          while true; do
-            STATUS=$(curl -s -u "${SONAR_TOKEN}:" \
-              "http://localhost:9000/api/ce/task?id=${ANALYSIS_ID}" | \
-              jq -r '.task.status')
+          echo "Found analysis task: $ANALYSIS_ID"
+          MAX_RETRIES=30
+          RETRY_COUNT=0
+          
+          while [ $RETRY_COUNT -lt $MAX_RETRIES ]; do
+            TASK_RESPONSE=$(curl -s -u "${SONAR_TOKEN}:" \
+              "http://localhost:9000/api/ce/task?id=${ANALYSIS_ID}")
+            
+            echo "Debug - Task Response:"
+            echo "$TASK_RESPONSE" | jq '.'
+            
+            STATUS=$(echo "$TASK_RESPONSE" | jq -r '.task.status // "UNKNOWN"')
+            
+            echo "Analysis status: $STATUS (Attempt $RETRY_COUNT of $MAX_RETRIES)"
             
             if [ "$STATUS" = "SUCCESS" ]; then
               echo "Analysis complete!"
               break
-            elif [ "$STATUS" = "FAILED" ]; then
-              echo "Analysis failed!"
+            elif [ "$STATUS" = "FAILED" ] || [ "$STATUS" = "CANCELED" ]; then
+              echo "Analysis $STATUS!"
+              exit 1
+            elif [ "$STATUS" = "UNKNOWN" ]; then
+              echo "Error getting task status"
               exit 1
             fi
-            echo "Analysis still processing... Status: $STATUS"
+            
+            RETRY_COUNT=$((RETRY_COUNT + 1))
             sleep 10
           done
+          
+          if [ $RETRY_COUNT -ge $MAX_RETRIES ]; then
+            echo "Timeout waiting for analysis to complete"
+            exit 1
+          fi
+        else
+          echo "Warning: No analysis task found. Continuing anyway..."
         fi
 
         {
@@ -224,7 +259,6 @@ runs:
 
         # Create ZIP archive
         zip -r "sonar-results_${TIMESTAMP}.zip" "${RESULTS_DIR}"
-
     - name: Upload Results
       uses: actions/upload-artifact@v4
       with:
