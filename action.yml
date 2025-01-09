@@ -99,7 +99,7 @@ runs:
             -Dsonar.verbose=true \
             -Dsonar.log.level=DEBUG \
             -X" \
-          sonarsource/sonar-scanner-cli
+          sonarsource/sonar-scanner-cli 2>&1 | tee sonar_analysis.log
         
         echo "Debug: Checking if project was created:"
         curl -s -u "${SONAR_TOKEN}:" "http://localhost:9000/api/projects/search?projects=${{ inputs.project-key }}" | jq .
