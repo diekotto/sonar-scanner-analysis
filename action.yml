@@ -76,6 +76,7 @@ runs:
           -e SONAR_HOST_URL="http://localhost:9000" \
           -e SONAR_LOGIN="${SONAR_TOKEN}" \
           -e SONAR_SCANNER_OPTS="-Dsonar.projectKey=${{ inputs.project-key }} \
+            -Dsonar.token=${SONAR_TOKEN} \
             -Dsonar.sources=${{ inputs.sources }} \
             -Dsonar.exclusions=${{ inputs.exclusions }} \
             -Dsonar.scm.provider=git \
