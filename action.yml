@@ -49,6 +49,7 @@ runs:
     - name: Install SonarScanner
       shell: bash
       run: |
+        set -e
         SCANNER_VERSION="${{ inputs.scanner-version }}"
         mkdir -p .sonar/scanner
         if [ ! -f ".sonar/scanner/sonar-scanner-${SCANNER_VERSION}-linux/bin/sonar-scanner" ]; then
