@@ -20,7 +20,7 @@ inputs:
   wait-for-server:
     description: "Time in seconds to wait for SonarQube server to start"
     required: false
-    default: "5"
+    default: "60"
   retention-days:
     description: "Number of days to retain the uploaded artifact"
     required: false
