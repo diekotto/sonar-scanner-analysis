@@ -99,7 +99,7 @@ runs:
             -Dsonar.verbose=true \
             -Dsonar.log.level=DEBUG \
             -X" \
-          sonarsource/sonar-scanner-cli 2>&1 | tee sonar_analysis.log
+          sonarsource/sonar-scanner-cli
         
         echo "Debug: Checking if project was created:"
         curl -s -u "${SONAR_TOKEN}:" "http://localhost:9000/api/projects/search?projects=${{ inputs.project-key }}" | jq .
@@ -274,7 +274,7 @@ runs:
         zip -r "sonar-results_${TIMESTAMP}.zip" "${RESULTS_DIR}"
 
     - name: Upload Results
-      uses: actions/upload-artifact@v4
+      uses: actions/upload-artifact@v3
       with:
         name: sonar-analysis-results
         path: sonar-results_*.zip
