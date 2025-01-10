@@ -186,9 +186,10 @@ runs:
           echo "## 📊 Metrics"
           METRICS=$(curl -s -u "${SONAR_TOKEN}:" \
             "http://localhost:9000/api/measures/component?component=${{ inputs.project-key }}&metricKeys=bugs,vulnerabilities,code_smells,coverage,duplicated_lines_density,reliability_rating,security_rating,sqale_rating")
+
           echo "| Metric | Value | Rating |"
           echo "|--------|--------|--------|"
-          
+
           # Function to safely get metric value
           get_metric_value() {
             local metric=$1
@@ -208,7 +209,16 @@ runs:
             esac
           }
 
-          # Print metrics with safe value extraction
+          # Function to format value based on metric type
+          format_value() {
+            local metric=$1
+            local value=$2
+            case "$metric" in
+              "coverage"|"duplicated_lines_density") echo "${value}%" ;;
+              *) echo "$value" ;;
+            esac
+          }
+
           metrics=(
             "bugs|reliability_rating"
             "vulnerabilities|security_rating"
@@ -224,9 +234,10 @@ runs:
               rating=$(get_metric_value "$rating_metric")
               rating_letter=$(convert_rating "$rating")
             else
-              rating_letter="N/A"
+              rating_letter="-"  # Cambiado de N/A a un guión para métricas sin rating
             fi
-            echo "| ${metric^} | ${value:-0} | $rating_letter |"
+            formatted_value=$(format_value "$metric" "${value:-0}")
+            echo "| ${metric^} | $formatted_value | $rating_letter |"
           done
 
           echo "## 🔍 Issues Breakdown"
@@ -250,7 +261,7 @@ runs:
           ' || echo "| No issues found | 0 |"
           
         } >> "${RESULTS_DIR}/analysis_report.md"
-        
+
         cat "${RESULTS_DIR}/analysis_report.md" >> $GITHUB_STEP_SUMMARY
 
         # Create ZIP archive
