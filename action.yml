@@ -258,6 +258,11 @@ runs:
         
         cat "${RESULTS_DIR}/analysis_report.md" >> $GITHUB_STEP_SUMMARY
 
+        ISSUES=$(curl -s -u "${SONAR_TOKEN}:" \
+            "http://localhost:9000//api/issues/search?componentKeys=${{ inputs.project-key }}&resolved=false")
+        echo "Issues found:" >> $GITHUB_STEP_SUMMARY
+        echo "$ISSUES" >> $GITHUB_STEP_SUMMARY
+
         # Create ZIP archive
         zip -r "sonar-results_${TIMESTAMP}.zip" "${RESULTS_DIR}"
     - name: Upload Results
