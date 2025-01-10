@@ -240,6 +240,26 @@ runs:
             echo "| ${metric^} | $formatted_value | $rating_letter |"
           done
 
+          echo "## 🔍 Issues Breakdown"
+          ISSUES=$(curl -s -u "${SONAR_TOKEN}:" \
+            "http://localhost:9000/api/issues/search?componentKeys=${{ inputs.project-key }}&resolved=false")
+          
+          echo "### By Type"
+          echo "| Type | Count |"
+          echo "|------|-------|"
+          echo "$ISSUES" | jq -r '
+            [.issues[] | .type] | group_by(.) | map({type: .[0], count: length}) |
+            .[] | "| \(.type) | \(.count) |"
+          ' || echo "| No issues found | 0 |"
+          
+          echo "### By Severity"
+          echo "| Severity | Count |"
+          echo "|----------|--------|"
+          echo "$ISSUES" | jq -r '
+            [.issues[] | .severity] | group_by(.) | map({severity: .[0], count: length}) |
+            .[] | "| \(.severity) | \(.count) |"
+          ' || echo "| No issues found | 0 |"
+          
           echo -e "\n## 🔍 Detailed Issues"
           ISSUES=$(curl -s -u "${SONAR_TOKEN}:" \
             "http://localhost:9000/api/issues/search?componentKeys=${{ inputs.project-key }}&types=CODE_SMELL,BUG,VULNERABILITY&ps=100")
@@ -261,26 +281,6 @@ runs:
             description=$(echo "$RULE_INFO" | jq -r '.rule.name')
             echo "| ${rule} | ${description} | ${count} |"
           done
-
-          echo "## 🔍 Issues Breakdown"
-          ISSUES=$(curl -s -u "${SONAR_TOKEN}:" \
-            "http://localhost:9000/api/issues/search?componentKeys=${{ inputs.project-key }}&resolved=false")
-          
-          echo "### By Type"
-          echo "| Type | Count |"
-          echo "|------|-------|"
-          echo "$ISSUES" | jq -r '
-            [.issues[] | .type] | group_by(.) | map({type: .[0], count: length}) |
-            .[] | "| \(.type) | \(.count) |"
-          ' || echo "| No issues found | 0 |"
-          
-          echo "### By Severity"
-          echo "| Severity | Count |"
-          echo "|----------|--------|"
-          echo "$ISSUES" | jq -r '
-            [.issues[] | .severity] | group_by(.) | map({severity: .[0], count: length}) |
-            .[] | "| \(.severity) | \(.count) |"
-          ' || echo "| No issues found | 0 |"
           
         } >> "${RESULTS_DIR}/analysis_report.md"
 
