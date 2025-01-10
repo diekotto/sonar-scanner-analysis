@@ -256,6 +256,8 @@ runs:
           ' || echo "| No issues found | 0 |"
           
         } >> "${RESULTS_DIR}/analysis_report.md"
+        
+        cat "${RESULTS_DIR}/analysis_report.md" >> $GITHUB_STEP_SUMMARY
 
         # Create ZIP archive
         zip -r "sonar-results_${TIMESTAMP}.zip" "${RESULTS_DIR}"
