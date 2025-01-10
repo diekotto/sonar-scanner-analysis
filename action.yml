@@ -16,7 +16,7 @@ inputs:
   exclusions:
     description: "Patterns to exclude from analysis"
     required: false
-    default: "**/node_modules/**,**/dist/**"
+    default: ""
   wait-for-server:
     description: "Time in seconds to wait for SonarQube server to start"
     required: false

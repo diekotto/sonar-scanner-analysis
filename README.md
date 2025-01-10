@@ -1,51 +1,24 @@
 # SonarScanner Analysis Action
 
-This action runs SonarScanner CLI analysis on your codebase and uploads the results as artifacts.
-
-## Sonar qube docs
-
-- [Server](https://docs.sonarsource.com/sonarqube-server/latest/setup-and-upgrade/pre-installation/linux/)
-- [CLI](https://docs.sonarsource.com/sonarqube-server/latest/analyzing-source-code/scanners/sonarscanner/)
+A GitHub Action that runs SonarQube analysis using local Docker containers, providing a self-contained analysis environment without requiring an external SonarQube server.
 
 ## Features
 
-- 🔍 Runs SonarScanner analysis without requiring a SonarQube server
-- 📦 Packages and uploads analysis results as artifacts
-- 💾 Caches SonarScanner installation for faster execution
-- ⚙️ Configurable source paths and exclusions
-- 📊 Generates a summary report
+- 🐳 Runs SonarQube server and scanner in Docker containers
+- 🔒 Self-contained analysis environment
+- 📊 Detailed analysis reports as workflow artifacts
+- 🚀 Easy integration with existing workflows
+- 📝 Comprehensive quality metrics and issue tracking
+- ⚡ Supports custom source paths and exclusions
+
+## Prerequisites
+
+- GitHub Actions runner with Docker support (e.g., `ubuntu-latest`)
+- Repository access to run workflows
 
 ## Usage
 
-```yaml
-- uses: diekotto/sonar-scanner-analysis@v1
-  with:
-    project-key: my-project
-    sources: src/
-    exclusions: "**/test/**,**/node_modules/**"
-```
-
-## Inputs
-
-| Input          | Description                       | Required | Default                         |
-| -------------- | --------------------------------- | -------- | ------------------------------- |
-| `project-key`  | Project key for the analysis      | Yes      | -                               |
-| `sources`      | Source directories to analyze     | No       | `.`                             |
-| `exclusions`   | Patterns to exclude from analysis | No       | `**/node_modules/**,**/dist/**` |
-| `java-version` | Java version for SonarScanner     | No       | `17`                            |
-
-## Outputs
-
-The action uploads a ZIP file containing:
-
-- Full analysis results
-- Summary report
-- Task report details
-- Scanner logs
-
-The artifacts are retained for 90 days and can be downloaded from the Actions tab.
-
-## Example Workflow
+Create or update your workflow file (e.g., `.github/workflows/sonar-analysis.yml`):
 
 ```yaml
 name: Code Analysis
@@ -61,11 +34,84 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - uses: diekotto/sonar-scanner-analysis@v1
+
+      - name: Run SonarScanner Analysis
+        uses: diekotto/sonar-scanner-analysis@v1
         with:
-          project-key: my-project
+          project-key: your-project-key
+          sources: src/
+          exclusions: "**/*.test.js,**/node_modules/**"
+```
+
+## Inputs
+
+| Input             | Description                                    | Required | Default                         |
+| ----------------- | ---------------------------------------------- | -------- | ------------------------------- |
+| `project-key`     | Project key for the analysis                   | Yes      | -                               |
+| `sources`         | Source directories to analyze                  | No       | `.`                             |
+| `exclusions`      | Patterns to exclude from analysis              | No       | ` ` |
+| `wait-for-server` | Max time in seconds to wait for SonarQube server   | No       | `60`                            |
+| `retention-days`  | Number of days to retain the analysis artifact | No       | `7`                             |
+
+## Outputs
+
+The action generates a detailed analysis report that includes:
+
+- Project quality gate status
+- Key metrics (bugs, vulnerabilities, code smells, etc.)
+- Issue breakdown by type and severity
+- Detailed issue list with file locations and descriptions
+- Most commonly violated rules
+
+The report is available as a workflow artifact and is also added to the workflow summary.
+
+## Example Analysis Report
+
+Here's a snippet of what the analysis report looks like:
+
+```markdown
+# 🔍 SonarQube Analysis Results
+
+## Project Information
+
+- **Project Key**: example-project
+- **Date**: Fri Jan 10 07:51:42 UTC 2025
+- **Runner**: Linux
+
+## 🎯 Quality Gate Status
+
+**Status**: OK
+
+## 📊 Metrics
+
+| Metric                   | Value | Rating |
+| ------------------------ | ----- | ------ |
+| Bugs                     | 0     | A      |
+| Vulnerabilities          | 0     | A      |
+| Code_smells              | 5     | A      |
+| Coverage                 | 0.0%  | -      |
+| Duplicated_lines_density | 0.0%  | -      |
 ```
 
 ## License
 
-The scripts and documentation in this project are released under the MIT [License](LICENSE).
+This action is released under the MIT License. See the [LICENSE](LICENSE) file for details.
+
+### Third-Party Licenses
+
+This action uses the following Docker images, both licensed under GNU LGPL v3:
+
+- `sonarqube:lts-community`
+- `sonarsource/sonar-scanner-cli`
+
+## Contributing
+
+Contributions are welcome! Please feel free to submit a Pull Request.
+
+## Support
+
+If you encounter any problems or have suggestions, please open an issue in the repository.
+
+---
+
+⭐ If you find this action useful, please consider giving it a star!
