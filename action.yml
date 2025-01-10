@@ -100,8 +100,7 @@ runs:
             -Dsonar.sourceEncoding=UTF-8 \
             -Dsonar.verbose=true \
             -Dsonar.log.level=DEBUG \
-            -X" \
-          sonarsource/sonar-scanner-cli 2>&1 | tee sonar_analysis.log
+          sonarsource/sonar-scanner-cli -X 2>&1 | tee sonar_analysis.log
 
         # Wait for analysis to complete
         echo "Waiting for analysis to complete..."
