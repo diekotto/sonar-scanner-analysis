@@ -191,7 +191,7 @@ runs:
           echo "## 📊 Metrics"
           METRICS=$(curl -s -u "${SONAR_TOKEN}:" \
             "http://localhost:9000/api/measures/component?component=${{ inputs.project-key }}&metricKeys=bugs,vulnerabilities,code_smells,coverage,duplicated_lines_density,reliability_rating,security_rating,sqale_rating")
-          
+          echo "$METRICS"
           echo "| Metric | Value | Rating |"
           echo "|--------|--------|--------|"
           
