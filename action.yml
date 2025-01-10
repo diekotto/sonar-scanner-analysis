@@ -240,6 +240,28 @@ runs:
             echo "| ${metric^} | $formatted_value | $rating_letter |"
           done
 
+          echo -e "\n## 🔍 Detailed Issues"
+          ISSUES=$(curl -s -u "${SONAR_TOKEN}:" \
+            "http://localhost:9000/api/issues/search?componentKeys=${{ inputs.project-key }}&types=CODE_SMELL,BUG,VULNERABILITY&ps=100")
+
+          echo "### 📝 Issue Details"
+          echo "| Type | Severity | File | Line | Message |"
+          echo "|------|-----------|------|------|---------|"
+
+          echo "$ISSUES" | jq -r '.issues[] | "| \(.type) | \(.severity) | \(.component | split(":")[1]) | \(.line // "-") | \(.message) |"'
+
+          # Opcional: Añadir reglas violadas más comunes
+          echo -e "\n### ⚠️ Most Common Rules Violated"
+          echo "| Rule | Description | Occurrences |"
+          echo "|------|-------------|-------------|"
+          echo "$ISSUES" | jq -r '.issues[] | .rule' | sort | uniq -c | sort -nr | \
+          while read -r count rule; do
+            RULE_INFO=$(curl -s -u "${SONAR_TOKEN}:" \
+              "http://localhost:9000/api/rules/show?key=${rule}")
+            description=$(echo "$RULE_INFO" | jq -r '.rule.name')
+            echo "| ${rule} | ${description} | ${count} |"
+          done
+
           echo "## 🔍 Issues Breakdown"
           ISSUES=$(curl -s -u "${SONAR_TOKEN}:" \
             "http://localhost:9000/api/issues/search?componentKeys=${{ inputs.project-key }}&resolved=false")
