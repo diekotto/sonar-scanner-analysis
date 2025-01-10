@@ -102,10 +102,6 @@ runs:
             -Dsonar.log.level=DEBUG" \
           sonarsource/sonar-scanner-cli -X 2>&1 | tee sonar_analysis.log
 
-        # Wait for analysis to complete
-        echo "Waiting for analysis to complete..."
-        sleep 60  # Give SonarQube time to process
-
         echo "Debug: Checking if project was created:"
         curl -s -u "${SONAR_TOKEN}:" "http://localhost:9000/api/projects/search?projects=${{ inputs.project-key }}" | jq .
         echo "\n"
@@ -190,7 +186,6 @@ runs:
           echo "## 📊 Metrics"
           METRICS=$(curl -s -u "${SONAR_TOKEN}:" \
             "http://localhost:9000/api/measures/component?component=${{ inputs.project-key }}&metricKeys=bugs,vulnerabilities,code_smells,coverage,duplicated_lines_density,reliability_rating,security_rating,sqale_rating")
-          echo "$METRICS"
           echo "| Metric | Value | Rating |"
           echo "|--------|--------|--------|"
           
@@ -203,7 +198,7 @@ runs:
 
           # Function to convert rating to letter
           convert_rating() {
-            case $1 in
+            case "${1%.*}" in
               "1") echo "A" ;;
               "2") echo "B" ;;
               "3") echo "C" ;;
@@ -257,11 +252,6 @@ runs:
         } >> "${RESULTS_DIR}/analysis_report.md"
         
         cat "${RESULTS_DIR}/analysis_report.md" >> $GITHUB_STEP_SUMMARY
-
-        ISSUES=$(curl -s -u "${SONAR_TOKEN}:" \
-            "http://localhost:9000//api/issues/search?componentKeys=${{ inputs.project-key }}&resolved=false")
-        echo "Issues found:" >> $GITHUB_STEP_SUMMARY
-        echo "$ISSUES" >> $GITHUB_STEP_SUMMARY
 
         # Create ZIP archive
         zip -r "sonar-results_${TIMESTAMP}.zip" "${RESULTS_DIR}"
